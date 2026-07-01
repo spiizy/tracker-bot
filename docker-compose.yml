@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tracker
+      POSTGRES_PASSWORD: tracker
+      POSTGRES_DB: tracker
+    ports:
+      # проброс наружу — чтобы локальный `npm run dev` тоже мог подключиться
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # лимиты под VPS 2 ядра / 4 ГБ
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # внутри compose ходим к БД по имени сервиса
+      DATABASE_URL: postgres://tracker:tracker@postgres:5432/tracker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+volumes:
+  pgdata:
