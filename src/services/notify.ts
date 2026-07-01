@@ -85,15 +85,9 @@ export function renderNotification(
       lines.push(`📄 ${tr(lang, 'note.contract')}: <code>${esc(toFriendly(event.token.address))}</code>`);
     }
   }
-  if (event.tonValue) lines.push(`💰 ${tr(lang, 'note.volume')}: <b>${esc(event.tonValue)} TON</b>`);
   if (opts.balances) lines.push(opts.balances);
   if (event.comment) lines.push(`💬 ${esc(event.comment)}`);
   if (event.type === 'other') lines.push(`ℹ️ ${esc(event.description)}`);
-
-  lines.push(`🔗 <code>${esc(shortHash(event.txHash))}</code>`);
-  if (!opts.pending && latencyMs !== null) {
-    lines.push(`⚡ ${tr(lang, 'note.latency')}: ${(latencyMs / 1000).toFixed(1)} ${tr(lang, 'note.sec')}`);
-  }
   if (opts.footer) lines.push(`\n<i>${esc(opts.footer)}</i>`);
 
   const keyboard = new InlineKeyboard();
@@ -112,10 +106,6 @@ export function renderNotification(
   keyboard.url(`🔍 ${explorerName(explorer)}`, txLink(explorer, event.txHash));
 
   return { text: lines.join('\n'), keyboard };
-}
-
-function shortHash(h: string): string {
-  return h.length > 16 ? `${h.slice(0, 8)}…${h.slice(-8)}` : h;
 }
 
 /** Настройки получателя, влияющие на рендер и доставку. */

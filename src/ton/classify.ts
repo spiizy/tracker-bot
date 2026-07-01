@@ -13,6 +13,7 @@ import type {
 // показываем самое значимое (своп важнее простого перевода).
 const ACTION_PRIORITY: Record<string, number> = {
   JettonSwap: 100,
+  SmartContractExec: 90,
   JettonMint: 80,
   JettonBurn: 80,
   DepositStake: 70,
@@ -72,6 +73,28 @@ export function classifyAction(
           ? formatUnits(s.amount_out, s.jetton_master_out.decimals)
           : undefined,
       };
+    }
+
+    case 'SmartContractExec': {
+      const e = action.SmartContractExec;
+      if (!e || !sameAddress(e.executor?.address, walletRaw)) return null;
+      const operation = e.operation ?? '';
+      const tonAttached = e.ton_attached ?? e.gram_attached;
+      if (/swap/i.test(operation)) {
+        return {
+          type: tonAttached && tonAttached > 0 ? 'buy' : 'swap',
+          tonValue: tonAttached ? formatTon(tonAttached) : undefined,
+          comment: operation,
+        };
+      }
+      if (/liquidity|provide|\bLP\b|pool deposit/i.test(operation)) {
+        return {
+          type: 'liquidity',
+          tonValue: tonAttached ? formatTon(tonAttached) : undefined,
+          comment: operation,
+        };
+      }
+      return null;
     }
 
     case 'JettonTransfer': {

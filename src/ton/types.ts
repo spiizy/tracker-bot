@@ -102,6 +102,14 @@ export interface TonApiAction {
     jetton_master_in?: TonApiJetton;
     jetton_master_out?: TonApiJetton;
   };
+  SmartContractExec?: {
+    executor?: TonApiAccountRef;
+    contract?: TonApiAccountRef;
+    ton_attached?: number;
+    gram_attached?: number;
+    operation?: string;
+    payload?: string;
+  };
   JettonMint?: {
     recipient: TonApiAccountRef;
     amount: string;

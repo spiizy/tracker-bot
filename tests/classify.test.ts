@@ -64,6 +64,22 @@ describe('classifyAction — swaps', () => {
     const r = classifyAction(action, WALLET);
     expect(r?.type).toBe('swap');
   });
+
+  it('detects DeDust swap exposed as SmartContractExec', () => {
+    const action: TonApiAction = {
+      type: 'SmartContractExec',
+      status: 'ok',
+      SmartContractExec: {
+        executor: { address: WALLET },
+        contract: { address: OTHER },
+        ton_attached: 10_200_000_000,
+        operation: 'DedustSwap',
+      },
+    };
+    const r = classifyAction(action, WALLET);
+    expect(r?.type).toBe('buy');
+    expect(r?.tonValue).toBe('10.2');
+  });
 });
 
 describe('classifyAction — transfers', () => {

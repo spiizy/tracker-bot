@@ -39,10 +39,12 @@ describe('renderNotification', () => {
     expect(urls.some((b) => (b as { url: string }).url.includes('tonviewer.com'))).toBe(true);
   });
 
-  it('shows the label and TON value in the text', () => {
+  it('shows the label and event type in the text', () => {
     const { text } = renderNotification(baseEvent, 'My wallet', 1200);
     expect(text).toContain('My wallet');
-    expect(text).toContain('5 TON');
+    expect(text).not.toContain('Объём');
+    expect(text).not.toContain('Задержка');
+    expect(text).not.toContain('hash123');
     expect(text).toContain('Покупка');
   });
 

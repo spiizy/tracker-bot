@@ -173,8 +173,8 @@ export function groupWalletsKeyboard(
 ): InlineKeyboard {
   const kb = new InlineKeyboard();
   for (const s of sortByTitle(subs)) {
-    const mark = s.groupIds.includes(groupId) ? '✅' : '⬜️';
-    kb.text(`${mark} ${titleOf(s)}`, `grptoggle:${groupId}:${s.walletId}`).row();
+    const mark = s.groupIds.includes(groupId) ? '✅ ' : '';
+    kb.text(`${mark}${titleOf(s)}`, `grptoggle:${groupId}:${s.walletId}`).row();
   }
   kb.text(tr(lang, 'menu.add'), 'addw').row();
   kb.text(tr(lang, 'common.back'), 'groups');
