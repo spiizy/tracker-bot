@@ -6,6 +6,7 @@ export interface UserSettings {
   silent: boolean; // тихий режим — уведомления без звука
   showContract: boolean; // показывать адрес контракта токена в уведомлении
   footer: string | null; // свой текст-подпись под уведомлениями
+  walletFooters: Record<string, string>; // подписи под уведомлениями по walletId
   minTon: number | null; // фильтр суммы: не слать события дешевле, TON
   maxTon: number | null; // фильтр суммы: не слать события дороже, TON
   dtrade: boolean; // кнопка DTrade в уведомлении
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   silent: false,
   showContract: true,
   footer: null,
+  walletFooters: {},
   minTon: null,
   maxTon: null,
   dtrade: true,
@@ -39,10 +41,19 @@ export function normalizeSettings(raw: unknown): UserSettings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
   const numOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const walletFooters = ((): Record<string, string> => {
+    if (!s.walletFooters || typeof s.walletFooters !== 'object') return {};
+    return Object.fromEntries(
+      Object.entries(s.walletFooters as Record<string, unknown>)
+        .filter(([k, v]) => /^\d+$/.test(k) && typeof v === 'string' && v.trim())
+        .map(([k, v]) => [k, (v as string).slice(0, 200)]),
+    );
+  })();
   return {
     silent: bool(s.silent, DEFAULT_SETTINGS.silent),
     showContract: bool(s.showContract, DEFAULT_SETTINGS.showContract),
     footer: typeof s.footer === 'string' && s.footer.trim() ? s.footer.slice(0, 200) : null,
+    walletFooters,
     minTon: numOrNull(s.minTon),
     maxTon: numOrNull(s.maxTon),
     dtrade: bool(s.dtrade, DEFAULT_SETTINGS.dtrade),

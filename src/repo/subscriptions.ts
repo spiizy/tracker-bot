@@ -1,6 +1,6 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { subscriptions, wallets, users, type Subscription } from '../db/schema.js';
+import { subscriptionGroups, subscriptions, wallets, users, type Subscription } from '../db/schema.js';
 import type { EventType } from '../ton/types.js';
 
 export interface SubscriptionWithWallet {
@@ -9,6 +9,7 @@ export interface SubscriptionWithWallet {
   address: string;
   label: string | null;
   groupId: number | null;
+  groupIds: number[];
   filters: EventType[] | null;
 }
 
@@ -50,7 +51,7 @@ export async function removeSubscription(userId: number, walletId: number): Prom
 }
 
 export async function listUserSubscriptions(userId: number): Promise<SubscriptionWithWallet[]> {
-  return db
+  const rows = await db
     .select({
       id: subscriptions.id,
       walletId: subscriptions.walletId,
@@ -63,6 +64,28 @@ export async function listUserSubscriptions(userId: number): Promise<Subscriptio
     .innerJoin(wallets, eq(wallets.id, subscriptions.walletId))
     .where(eq(subscriptions.userId, userId))
     .orderBy(subscriptions.createdAt);
+
+  if (rows.length === 0) return [];
+
+  const bySub = new Map<number, Set<number>>();
+  for (const row of rows) {
+    bySub.set(row.id, new Set(row.groupId == null ? [] : [row.groupId]));
+  }
+
+  const memberships = await db
+    .select({
+      subscriptionId: subscriptionGroups.subscriptionId,
+      groupId: subscriptionGroups.groupId,
+    })
+    .from(subscriptionGroups)
+    .where(inArray(subscriptionGroups.subscriptionId, rows.map((r) => r.id)));
+
+  for (const m of memberships) bySub.get(m.subscriptionId)?.add(m.groupId);
+
+  return rows.map((row) => ({
+    ...row,
+    groupIds: [...(bySub.get(row.id) ?? new Set<number>())],
+  }));
 }
 
 /** Все подписчики кошелька — для веерной рассылки уведомления. */
@@ -112,6 +135,39 @@ export async function assignGroup(
     .update(subscriptions)
     .set({ groupId })
     .where(and(eq(subscriptions.userId, userId), eq(subscriptions.walletId, walletId)));
+}
+
+async function findSubscriptionId(userId: number, walletId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ id: subscriptions.id })
+    .from(subscriptions)
+    .where(and(eq(subscriptions.userId, userId), eq(subscriptions.walletId, walletId)))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+export async function addToGroup(userId: number, walletId: number, groupId: number): Promise<void> {
+  const subscriptionId = await findSubscriptionId(userId, walletId);
+  if (subscriptionId === null) return;
+  await db
+    .insert(subscriptionGroups)
+    .values({ subscriptionId, groupId })
+    .onConflictDoNothing();
+}
+
+export async function removeFromGroup(userId: number, walletId: number, groupId: number): Promise<void> {
+  const subscriptionId = await findSubscriptionId(userId, walletId);
+  if (subscriptionId === null) return;
+  await db
+    .delete(subscriptionGroups)
+    .where(and(eq(subscriptionGroups.subscriptionId, subscriptionId), eq(subscriptionGroups.groupId, groupId)));
+}
+
+export async function clearGroups(userId: number, walletId: number): Promise<void> {
+  const subscriptionId = await findSubscriptionId(userId, walletId);
+  if (subscriptionId === null) return;
+  await db.delete(subscriptionGroups).where(eq(subscriptionGroups.subscriptionId, subscriptionId));
+  await assignGroup(userId, walletId, null);
 }
 
 /** Сколько пользователей отслеживают данный адрес (raw). */

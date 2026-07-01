@@ -77,6 +77,7 @@ export function walletsList(
     .text(`${sort === 'none' ? '✅ ' : ''}${tr(lang, 'sort.none')}`, 'sort:none')
     .row();
   kb.text(tr(lang, 'menu.add'), 'addw').text(tr(lang, 'wallets.delete'), 'delmode');
+  kb.row().text(tr(lang, 'wallets.exportMessage'), 'export:message');
   kb.row().text(tr(lang, 'common.menu'), 'menu');
   return { kb, totalPages };
 }
@@ -124,13 +125,14 @@ export function walletDetail(walletId: number, lang: Lang): InlineKeyboard {
 export function groupPicker(
   walletId: number,
   groups: Group[],
-  currentGroupId: number | null,
+  currentGroupIds: number[],
   lang: Lang,
 ): InlineKeyboard {
   const kb = new InlineKeyboard();
-  kb.text(`${currentGroupId == null ? '✅ ' : ''}${tr(lang, 'groups.none')}`, `grpassign:${walletId}:0`).row();
+  const selected = new Set(currentGroupIds);
+  kb.text(`${selected.size === 0 ? '✅ ' : ''}${tr(lang, 'groups.none')}`, `grpassign:${walletId}:0`).row();
   for (const g of groups) {
-    kb.text(`${g.id === currentGroupId ? '✅ ' : ''}🗂 ${g.name}`, `grpassign:${walletId}:${g.id}`).row();
+    kb.text(`${selected.has(g.id) ? '✅ ' : ''}🗂 ${g.name}`, `grpassign:${walletId}:${g.id}`).row();
   }
   if (groups.length === 0) kb.text(tr(lang, 'groups.create'), 'grpnew').row();
   kb.text(tr(lang, 'common.back'), `wallet:${walletId}`);
@@ -158,9 +160,24 @@ export function filtersKeyboard(walletId: number, active: EventType[] | null, la
 export function groupsKeyboard(groups: Group[], lang: Lang): InlineKeyboard {
   const kb = new InlineKeyboard();
   for (const g of groups) {
-    kb.text(`🗂 ${g.name}`, 'noop').text('🗑', `grpdel:${g.id}`).row();
+    kb.text(`🗂 ${g.name}`, `group:${g.id}`).text('🗑', `grpdel:${g.id}`).row();
   }
   kb.text(tr(lang, 'groups.create'), 'grpnew').row().text(tr(lang, 'common.menu'), 'menu');
+  return kb;
+}
+
+export function groupWalletsKeyboard(
+  groupId: number,
+  subs: SubscriptionWithWallet[],
+  lang: Lang,
+): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (const s of sortByTitle(subs)) {
+    const mark = s.groupIds.includes(groupId) ? '✅' : '⬜️';
+    kb.text(`${mark} ${titleOf(s)}`, `grptoggle:${groupId}:${s.walletId}`).row();
+  }
+  kb.text(tr(lang, 'menu.add'), 'addw').row();
+  kb.text(tr(lang, 'common.back'), 'groups');
   return kb;
 }
 
@@ -206,6 +223,32 @@ export function amountKeyboard(lang: Lang): InlineKeyboard {
     .text(tr(lang, 'amount.clear'), 'amt:clear')
     .row()
     .text(tr(lang, 'common.back'), 'set:notifs');
+}
+
+function footerModeRow(kb: InlineKeyboard, lang: Lang): InlineKeyboard {
+  return kb.text(tr(lang, 'footer.byList'), 'footer:list').text(tr(lang, 'footer.byGroups'), 'footer:groups').row();
+}
+
+export function footerWalletsKeyboard(
+  subs: SubscriptionWithWallet[],
+  lang: Lang,
+  back = 'set:notifs',
+): InlineKeyboard {
+  const kb = footerModeRow(new InlineKeyboard(), lang);
+  for (const s of sortByTitle(subs)) {
+    kb.text(`👛 ${titleOf(s)}`, `footer:wallet:${s.walletId}`).row();
+  }
+  kb.text(tr(lang, 'common.back'), back);
+  return kb;
+}
+
+export function footerGroupsKeyboard(groups: Group[], lang: Lang): InlineKeyboard {
+  const kb = footerModeRow(new InlineKeyboard(), lang);
+  for (const g of groups) {
+    kb.text(`🗂 ${g.name}`, `footer:group:${g.id}`).row();
+  }
+  kb.text(tr(lang, 'common.back'), 'set:notifs');
+  return kb;
 }
 
 /** Подраздел импорта/экспорта. */

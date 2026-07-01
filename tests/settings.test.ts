@@ -9,10 +9,11 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS);
   });
   it('merges valid partial values', () => {
-    const s = normalizeSettings({ silent: true, minTon: 5, footer: 'hi', sort: 'date' });
+    const s = normalizeSettings({ silent: true, minTon: 5, footer: 'hi', walletFooters: { 12: 'one' }, sort: 'date' });
     expect(s.silent).toBe(true);
     expect(s.minTon).toBe(5);
     expect(s.footer).toBe('hi');
+    expect(s.walletFooters).toEqual({ 12: 'one' });
     expect(s.sort).toBe('date');
     expect(s.showContract).toBe(true); // дефолт сохранён
   });
@@ -47,7 +48,7 @@ describe('renderNotification settings', () => {
   });
   it('appends footer text', () => {
     const { text } = renderNotification(event, null, 100, { footer: 'мой текст' });
-    expect(text).toContain('мой текст');
+    expect(text).toContain('<i>мой текст</i>');
   });
   it('toggles trade buttons', () => {
     const { keyboard } = renderNotification(event, null, 100, { dtrade: false, redotrade: true });

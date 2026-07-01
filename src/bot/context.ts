@@ -12,6 +12,7 @@ export type Awaiting =
   | { kind: 'broadcast' }
   | { kind: 'admin_find_user' }
   | { kind: 'footer' }
+  | { kind: 'footer_wallet'; walletId: number }
   | { kind: 'min_ton' }
   | { kind: 'max_ton' }
   | { kind: 'wallet_lookup' };

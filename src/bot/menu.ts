@@ -21,10 +21,13 @@ import {
   confirmDelete,
   filtersKeyboard,
   groupsKeyboard,
+  groupWalletsKeyboard,
   groupPicker,
   settingsKeyboard,
   notifsKeyboard,
   amountKeyboard,
+  footerWalletsKeyboard,
+  footerGroupsKeyboard,
   ioKeyboard,
   langKeyboard,
   explorerKeyboard,
@@ -147,6 +150,11 @@ export function registerUserHandlers(bot: Bot<BotContext>, watcher: Watcher): vo
     if (settingsOf(ctx).sort !== mode) await updateSetting(ctx, 'sort', mode);
     await showWallets(ctx, 0);
   });
+  bot.callbackQuery('export:message', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const subs = await subRepo.listUserSubscriptions(ctx.from!.id);
+    await ctx.reply(formatWalletsExportMessage(ctx, subs), { parse_mode: 'HTML' });
+  });
 
   // ── мультиудаление ───────────────────────────────────────
   const showDeleteMode = async (ctx: BotContext, page: number) => {
@@ -198,7 +206,7 @@ export function registerUserHandlers(bot: Bot<BotContext>, watcher: Watcher): vo
     const groups = await groupRepo.listGroups(ctx.from!.id);
     const lang = langOf(ctx);
     const explId = explorerOf(ctx);
-    const groupName = groups.find((g) => g.id === sub.groupId)?.name ?? tr(lang, 'wallet.noGroup');
+    const groupName = groups.filter((g) => sub.groupIds.includes(g.id)).map((g) => g.name).join(', ') || tr(lang, 'wallet.noGroup');
     const filterInfo = sub.filters ? `${sub.filters.length}/${ALL_EVENT_TYPES.length}` : tr(lang, 'wallet.filtersAll');
     const text = tr(lang, 'wallet.card', {
       title: sub.label ? escapeHtml(sub.label) : shortAddress(sub.address),
@@ -230,19 +238,30 @@ export function registerUserHandlers(bot: Bot<BotContext>, watcher: Watcher): vo
     await ctx.answerCallbackQuery();
     const groups = await groupRepo.listGroups(ctx.from!.id);
     await ctx.editMessageText(t(ctx, 'groups.pickTitle'), {
-      reply_markup: groupPicker(walletId, groups, sub.groupId, langOf(ctx)),
+      reply_markup: groupPicker(walletId, groups, sub.groupIds, langOf(ctx)),
     });
   });
 
   bot.callbackQuery(/^grpassign:(\d+):(\d+)$/, async (ctx) => {
     const walletId = Number(ctx.match[1]);
     const rawGroupId = Number(ctx.match[2]);
-    const groupId = rawGroupId === 0 ? null : rawGroupId;
-    if (groupId !== null && !(await groupRepo.getGroup(ctx.from!.id, groupId))) {
+    if (rawGroupId === 0) {
+      await subRepo.clearGroups(ctx.from!.id, walletId);
+      await ctx.answerCallbackQuery({ text: t(ctx, 'groups.removed') });
+      await showWalletDetail(ctx, walletId);
+      return;
+    }
+    const groupId = rawGroupId;
+    if (!(await groupRepo.getGroup(ctx.from!.id, groupId))) {
       return ctx.answerCallbackQuery({ text: t(ctx, 'groups.notFound'), show_alert: true });
     }
-    await subRepo.assignGroup(ctx.from!.id, walletId, groupId);
-    await ctx.answerCallbackQuery({ text: groupId ? t(ctx, 'groups.added') : t(ctx, 'groups.removed') });
+    const subs = await subRepo.listUserSubscriptions(ctx.from!.id);
+    const sub = subs.find((s) => s.walletId === walletId);
+    if (!sub) return ctx.answerCallbackQuery({ text: t(ctx, 'wallet.notFound'), show_alert: true });
+    const selected = sub.groupIds.includes(groupId);
+    if (selected) await subRepo.removeFromGroup(ctx.from!.id, walletId, groupId);
+    else await subRepo.addToGroup(ctx.from!.id, walletId, groupId);
+    await ctx.answerCallbackQuery({ text: selected ? t(ctx, 'groups.removed') : t(ctx, 'groups.added') });
     await showWalletDetail(ctx, walletId);
   });
 
@@ -322,9 +341,45 @@ export function registerUserHandlers(bot: Bot<BotContext>, watcher: Watcher): vo
       reply_markup: groupsKeyboard(groups, langOf(ctx)),
     });
   };
+  const showGroup = async (ctx: BotContext, groupId: number): Promise<boolean> => {
+    const group = await groupRepo.getGroup(ctx.from!.id, groupId);
+    if (!group) return false;
+    const subs = await subRepo.listUserSubscriptions(ctx.from!.id);
+    const selected = subs.filter((s) => s.groupIds.includes(groupId)).length;
+    const text = subs.length === 0
+      ? t(ctx, 'groups.walletsEmpty')
+      : t(ctx, 'groups.detailTitle', {
+          name: escapeHtml(group.name),
+          selected,
+          total: subs.length,
+        });
+    await ctx.editMessageText(text, {
+      parse_mode: 'HTML',
+      reply_markup: groupWalletsKeyboard(groupId, subs, langOf(ctx)),
+    });
+    return true;
+  };
   bot.callbackQuery('groups', async (ctx) => {
     await ctx.answerCallbackQuery();
     await showGroups(ctx);
+  });
+  bot.callbackQuery(/^group:(\d+)$/, async (ctx) => {
+    const ok = await showGroup(ctx, Number(ctx.match[1]));
+    await ctx.answerCallbackQuery(ok ? undefined : { text: t(ctx, 'groups.notFound'), show_alert: true });
+  });
+  bot.callbackQuery(/^grptoggle:(\d+):(\d+)$/, async (ctx) => {
+    const groupId = Number(ctx.match[1]);
+    const walletId = Number(ctx.match[2]);
+    const group = await groupRepo.getGroup(ctx.from!.id, groupId);
+    if (!group) return ctx.answerCallbackQuery({ text: t(ctx, 'groups.notFound'), show_alert: true });
+    const subs = await subRepo.listUserSubscriptions(ctx.from!.id);
+    const sub = subs.find((s) => s.walletId === walletId);
+    if (!sub) return ctx.answerCallbackQuery({ text: t(ctx, 'wallet.notFound'), show_alert: true });
+    const selected = sub.groupIds.includes(groupId);
+    if (selected) await subRepo.removeFromGroup(ctx.from!.id, walletId, groupId);
+    else await subRepo.addToGroup(ctx.from!.id, walletId, groupId);
+    await ctx.answerCallbackQuery({ text: selected ? t(ctx, 'groups.removed') : t(ctx, 'groups.added') });
+    await showGroup(ctx, groupId);
   });
   bot.callbackQuery('grpnew', async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -419,7 +474,7 @@ export function registerUserHandlers(bot: Bot<BotContext>, watcher: Watcher): vo
     'redotrade',
   ]);
   const showNotifs = async (ctx: BotContext) => {
-    await ctx.editMessageText(t(ctx, 'notifs.title'), {
+    await ctx.editMessageText(t(ctx, 'notifs.title', activeTradeBots(ctx)), {
       parse_mode: 'HTML',
       reply_markup: notifsKeyboard(settingsOf(ctx), langOf(ctx)),
     });
@@ -468,13 +523,52 @@ export function registerUserHandlers(bot: Bot<BotContext>, watcher: Watcher): vo
   });
 
   // подпись под уведомлениями
+  const showFooterWallets = async (ctx: BotContext, subs?: Awaited<ReturnType<typeof subRepo.listUserSubscriptions>>) => {
+    const list = subs ?? await subRepo.listUserSubscriptions(ctx.from!.id);
+    await ctx.editMessageText(list.length ? t(ctx, 'footer.chooseWallet') : t(ctx, 'footer.noWallets'), {
+      parse_mode: 'HTML',
+      reply_markup: footerWalletsKeyboard(list, langOf(ctx)),
+    });
+  };
   bot.callbackQuery('set:footer', async (ctx) => {
     await ctx.answerCallbackQuery();
-    ctx.session.awaiting = { kind: 'footer' };
-    const cur = settingsOf(ctx).footer ? escapeHtml(settingsOf(ctx).footer!) : t(ctx, 'footer.empty');
-    await ctx.editMessageText(t(ctx, 'footer.title', cur), {
+    await showFooterWallets(ctx);
+  });
+  bot.callbackQuery('footer:list', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showFooterWallets(ctx);
+  });
+  bot.callbackQuery('footer:groups', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const groups = await groupRepo.listGroups(ctx.from!.id);
+    await ctx.editMessageText(groups.length ? t(ctx, 'footer.chooseGroup') : t(ctx, 'footer.noGroups'), {
       parse_mode: 'HTML',
-      reply_markup: backTo('set:notifs', t(ctx, 'common.cancel')),
+      reply_markup: footerGroupsKeyboard(groups, langOf(ctx)),
+    });
+  });
+  bot.callbackQuery(/^footer:group:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const groupId = Number(ctx.match[1]);
+    const subs = (await subRepo.listUserSubscriptions(ctx.from!.id)).filter((s) => s.groupIds.includes(groupId));
+    await ctx.editMessageText(subs.length ? t(ctx, 'footer.chooseWallet') : t(ctx, 'footer.noWallets'), {
+      parse_mode: 'HTML',
+      reply_markup: footerWalletsKeyboard(subs, langOf(ctx), 'footer:groups'),
+    });
+  });
+  bot.callbackQuery(/^footer:wallet:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const walletId = Number(ctx.match[1]);
+    const subs = await subRepo.listUserSubscriptions(ctx.from!.id);
+    const sub = subs.find((s) => s.walletId === walletId);
+    if (!sub) {
+      await ctx.editMessageText(t(ctx, 'wallet.notFound'), { reply_markup: backTo('set:footer', t(ctx, 'common.back')) });
+      return;
+    }
+    ctx.session.awaiting = { kind: 'footer_wallet', walletId };
+    const cur = settingsOf(ctx).walletFooters[String(walletId)];
+    await ctx.editMessageText(t(ctx, 'footer.walletTitle', cur ? escapeHtml(cur) : t(ctx, 'footer.empty')), {
+      parse_mode: 'HTML',
+      reply_markup: backTo('set:footer', t(ctx, 'common.cancel')),
     });
   });
 
@@ -560,6 +654,17 @@ export function registerUserHandlers(bot: Bot<BotContext>, watcher: Watcher): vo
         await ctx.reply(t(ctx, 'misc.saved'), { reply_markup: backTo('set:notifs', t(ctx, 'common.back')) });
         break;
       }
+      case 'footer_wallet': {
+        ctx.session.awaiting = undefined;
+        const walletFooters = { ...settingsOf(ctx).walletFooters };
+        if (text === '-') delete walletFooters[String(awaiting.walletId)];
+        else walletFooters[String(awaiting.walletId)] = text.slice(0, 200);
+        await updateSetting(ctx, 'walletFooters', walletFooters);
+        await ctx.reply(t(ctx, text === '-' ? 'misc.cleared' : 'misc.saved'), {
+          reply_markup: backTo('set:footer', t(ctx, 'common.back')),
+        });
+        break;
+      }
       case 'min_ton':
       case 'max_ton': {
         const kind = awaiting.kind;
@@ -639,6 +744,26 @@ async function replyWallets(ctx: BotContext): Promise<void> {
   }
   const { kb } = walletsList(subs, 0, langOf(ctx), settingsOf(ctx).sort);
   await ctx.reply(t(ctx, 'wallets.title', subs.length), { parse_mode: 'HTML', reply_markup: kb });
+}
+
+function activeTradeBots(ctx: BotContext): string {
+  const s = settingsOf(ctx);
+  const bots = [s.dtrade ? 'DTrade' : null, s.redotrade ? 'RedoTrade' : null].filter(Boolean);
+  if (bots.length > 0) return bots.join(', ');
+  return langOf(ctx) === 'ru' ? 'нет' : 'none';
+}
+
+function formatWalletsExportMessage(
+  ctx: BotContext,
+  subs: { address: string; label: string | null }[],
+): string {
+  if (subs.length === 0) return t(ctx, 'wallets.exportEmpty');
+  const lines = subs.map((s, i) => {
+    const label = s.label?.trim() ? escapeHtml(s.label) : (langOf(ctx) === 'ru' ? 'без метки' : 'no label');
+    return `${i + 1}. <code>${toFriendly(s.address)}</code> — ${label}`;
+  });
+  const title = langOf(ctx) === 'ru' ? '📋 <b>Экспорт кошельков</b>' : '📋 <b>Wallet export</b>';
+  return `${title}\n\n${lines.join('\n')}`;
 }
 
 interface WalletEntry {

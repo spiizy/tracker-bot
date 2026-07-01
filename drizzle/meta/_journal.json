@@ -29,6 +29,13 @@
       "when": 1782930000000,
       "tag": "0003_last_checked_at",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783020000000,
+      "tag": "0004_subscription_groups",
+      "breakpoints": true
     }
   ]
 }

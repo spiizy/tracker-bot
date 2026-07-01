@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   index,
   serial,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import type { EventType } from '../ton/types.js';
 
@@ -95,6 +96,23 @@ export const subscriptions = pgTable(
   }),
 );
 
+export const subscriptionGroups = pgTable(
+  'subscription_groups',
+  {
+    subscriptionId: integer('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    groupId: integer('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.subscriptionId, t.groupId] }),
+    groupIdx: index('subscription_groups_group_idx').on(t.groupId),
+  }),
+);
+
 /**
  * Счётчик доставленных уведомлений — для статистики (без хранения каждой транзакции).
  */
@@ -107,3 +125,4 @@ export type User = typeof users.$inferSelect;
 export type Wallet = typeof wallets.$inferSelect;
 export type Group = typeof groups.$inferSelect;
 export type Subscription = typeof subscriptions.$inferSelect;
+export type SubscriptionGroup = typeof subscriptionGroups.$inferSelect;

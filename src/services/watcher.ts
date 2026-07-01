@@ -58,7 +58,7 @@ export class Watcher {
   // защита от параллельной обработки одного кошелька
   private processing = new Set<number>();
   private rerun = new Set<number>();
-  // event_id -> отправленные pending-сообщения (для редактирования в финал)
+  // event_id / walletId:lt -> отправленные pending-сообщения (для редактирования в финал)
   private pendingEvents = new Map<string, PendingEntry>();
   // event_id -> timestamp финальной отправки (дедуп + прунинг)
   private sentFinal = new Map<string, number>();
@@ -130,7 +130,7 @@ export class Watcher {
         events,
         baseLt,
         entry.lastEventId,
-        (id) => this.pendingEvents.has(id),
+        (raw) => this.pendingEvents.has(raw.event_id) || this.pendingEvents.has(pendingKey(walletId, raw)),
         (id) => this.sentFinal.has(id),
       );
 
@@ -172,14 +172,14 @@ export class Watcher {
   }
 
   /** Настройки получателя → параметры рендера/доставки уведомления. */
-  private prefsOf(sub: Subscriber): RecipientPrefs {
+  private prefsOf(sub: Subscriber, walletId: number): RecipientPrefs {
     const s = normalizeSettings(sub.settings);
     return {
       lang: sub.lang,
       explorer: sub.explorer,
       silent: s.silent,
       showContract: s.showContract,
-      footer: s.footer,
+      footer: s.walletFooters[String(walletId)] ?? null,
       dtrade: s.dtrade,
       redotrade: s.redotrade,
       showBalances: s.showBalances,
@@ -224,28 +224,29 @@ export class Watcher {
   private async emitPending(walletId: number, addressRaw: string, raw: TonApiEvent): Promise<void> {
     const event = classifyEvent(raw, addressRaw);
     if (!event) {
-      this.pendingEvents.set(raw.event_id, { sent: [], asPhoto: false, createdAt: Date.now() });
+      this.rememberPending(walletId, raw, { sent: [], asPhoto: false, createdAt: Date.now() });
       return;
     }
     const asPhoto = this.chartable(event);
     const sent: SentMsg[] = [];
     for (const sub of await this.recipients(walletId, event)) {
-      const prefs = this.prefsOf(sub);
+      const prefs = this.prefsOf(sub, walletId);
       const messageId = await this.notifier.send(sub.userId, event, sub.label, prefs, true, asPhoto);
       if (messageId !== null) sent.push({ userId: sub.userId, messageId, label: sub.label, prefs });
     }
-    this.pendingEvents.set(raw.event_id, { sent, asPhoto, createdAt: Date.now() });
+    this.rememberPending(walletId, raw, { sent, asPhoto, createdAt: Date.now() });
   }
 
   /** Финализация события: правим pending-сообщения или шлём финал напрямую. */
   private async emitFinal(walletId: number, addressRaw: string, raw: TonApiEvent): Promise<void> {
+    const tracked = this.pendingEvents.get(raw.event_id) ?? this.pendingEvents.get(pendingKey(walletId, raw));
     const event = classifyEvent(raw, addressRaw);
     if (!event) {
       this.sentFinal.set(raw.event_id, Date.now());
+      if (tracked) this.forgetPending(walletId, raw, tracked);
       return;
     }
     metrics.recordEvent(Math.max(0, Date.now() - event.timestamp * 1000));
-    const tracked = this.pendingEvents.get(raw.event_id);
 
     if (tracked && tracked.sent.length > 0) {
       // правим в той же форме (фото/текст), в которой pending был реально отправлен
@@ -257,12 +258,12 @@ export class Watcher {
       for (const s of tracked.sent) {
         await this.notifier.editToFinal(s.userId, s.messageId, event, s.label, s.prefs, asPhoto, chart ?? undefined);
       }
-      this.pendingEvents.delete(raw.event_id);
+      this.forgetPending(walletId, raw, tracked);
     } else {
-      if (tracked) this.pendingEvents.delete(raw.event_id);
+      if (tracked) this.forgetPending(walletId, raw, tracked);
       const asPhoto = this.chartable(event);
       // pending не показывали (событие пришло уже финальным) — шлём сразу финал
-      const targets = (await this.recipients(walletId, event)).map((sub) => ({ sub, prefs: this.prefsOf(sub) }));
+      const targets = (await this.recipients(walletId, event)).map((sub) => ({ sub, prefs: this.prefsOf(sub, walletId) }));
       await this.withBalances(addressRaw, event, targets.map((t) => t.prefs));
       const sent: SentMsg[] = [];
       for (const { sub, prefs } of targets) {
@@ -281,6 +282,19 @@ export class Watcher {
     if (!image) return;
     for (const s of sent) {
       await this.notifier.editToFinal(s.userId, s.messageId, event, s.label, s.prefs, true, image);
+    }
+  }
+
+  private rememberPending(walletId: number, raw: TonApiEvent, entry: PendingEntry): void {
+    this.pendingEvents.set(raw.event_id, entry);
+    this.pendingEvents.set(pendingKey(walletId, raw), entry);
+  }
+
+  private forgetPending(walletId: number, raw: TonApiEvent, entry: PendingEntry): void {
+    this.pendingEvents.delete(raw.event_id);
+    this.pendingEvents.delete(pendingKey(walletId, raw));
+    for (const [id, value] of this.pendingEvents) {
+      if (value === entry) this.pendingEvents.delete(id);
     }
   }
 
@@ -384,11 +398,15 @@ function passesAmount(s: UserSettings, event: WalletEvent): boolean {
   return true;
 }
 
+function pendingKey(walletId: number, raw: TonApiEvent): string {
+  return `${walletId}:${raw.lt}`;
+}
+
 export function planWalletEvents(
   events: TonApiEvent[],
   baseLt: bigint,
   lastEventId: string | null,
-  hasPending: (eventId: string) => boolean,
+  hasPending: (event: TonApiEvent) => boolean,
   hasSentFinal: (eventId: string) => boolean,
 ): EventPlan {
   const plan: EventPlan = {
@@ -402,7 +420,7 @@ export function planWalletEvents(
   for (const raw of asc) {
     const lt = BigInt(raw.lt);
     const isNew = lt > baseLt;
-    const tracked = hasPending(raw.event_id);
+    const tracked = hasPending(raw);
 
     if (raw.in_progress) {
       if (isNew && !tracked) plan.pending.push(raw);

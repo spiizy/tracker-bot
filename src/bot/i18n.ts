@@ -65,6 +65,8 @@ const RU = {
   'wallets.empty': 'У вас пока нет кошельков. Добавьте первый:',
   'wallets.addBtn': '➕ Добавить кошелёк',
   'wallets.delete': '🗑 Удалить',
+  'wallets.exportMessage': '📋 Экспорт кошельков',
+  'wallets.exportEmpty': 'Кошельков пока нет.',
 
   // ── режим мультиудаления ──
   'del.title': (n: number) =>
@@ -104,7 +106,7 @@ const RU = {
     `✅ <b>Кошелёк добавлен в отслеживание</b>\n\n` +
     `👛 Адрес: <code>${p.address}</code>\n` +
     `🔎 Статус: <b>активен</b>\n` +
-    `⏱ Проверка: каждые <b>${p.interval}</b> сек + мгновенный TonAPI stream\n\n` +
+    `⏱️ Проверка: мгновенно через TonAPI Stream + резервная проверка каждые <b>${p.interval}</b> сек\n\n` +
     `Теперь я пришлю уведомление, когда появится новая транзакция.`,
   'add.duplicateCard': (p: { address: string }) =>
     `♻️ <b>Кошелёк уже отслеживается</b>\n\n` +
@@ -124,6 +126,11 @@ const RU = {
   'groups.created': '🗂 Группа создана.',
   'groups.deleted': 'Группа удалена',
   'groups.pickTitle': '🗂 Выберите группу для кошелька:',
+  'groups.detailTitle': (p: { name: string; selected: number; total: number }) =>
+    `🗂 <b>${p.name}</b>\n\n` +
+    `Выбрано кошельков: <b>${p.selected}/${p.total}</b>\n\n` +
+    `Нажмите на кошелёк, чтобы добавить его в группу или убрать из неё.`,
+  'groups.walletsEmpty': 'В группе пока нечего настраивать: сначала добавьте кошелёк.',
   'groups.none': '🚫 Без группы',
   'groups.added': 'Добавлено в группу',
   'groups.removed': 'Убрано из группы',
@@ -177,7 +184,10 @@ const RU = {
 
   // ── настройки уведомлений ──
   'settings.notifs': '🔔 Уведомления',
-  'notifs.title': '🔔 <b>Настройки уведомлений</b>\n\nФормат и фильтры сообщений о транзакциях.',
+  'notifs.title': (activeBots: string) =>
+    `🔔 <b>Настройки уведомлений</b>\n\n` +
+    `Формат и фильтры сообщений о транзакциях.\n\n` +
+    `Активные боты торговли: <b>${activeBots}</b>`,
   'set.silent': '🌨 Тихий режим',
   'set.contract': '⚡ Контракт токена',
   'set.balances': '💼 Балансы',
@@ -207,6 +217,14 @@ const RU = {
   // подпись под уведомлениями
   'footer.title': (cur: string) =>
     `✏️ <b>Подпись под уведомлениями</b>\n\nСейчас: ${cur}\n\nЭтот текст добавляется внизу каждого уведомления.`,
+  'footer.chooseWallet': '✏️ <b>Выберите кошелёк для подписи</b>',
+  'footer.chooseGroup': '✏️ <b>Выберите группу</b>',
+  'footer.byList': '📋 Список кошельков',
+  'footer.byGroups': '🗂 По группам',
+  'footer.noWallets': 'Сначала добавьте кошелёк.',
+  'footer.noGroups': 'Групп пока нет.',
+  'footer.walletTitle': (cur: string) =>
+    `✏️ <b>Подпись для кошелька</b>\n\nСейчас: ${cur}\n\nПришлите новый текст или «-», чтобы убрать подпись.`,
   'footer.prompt': 'Пришлите текст-подпись (до 200 символов), или «-» чтобы убрать:',
   'footer.empty': '<i>не задана</i>',
 
@@ -316,6 +334,8 @@ const EN: Record<keyof typeof RU, Entry> = {
   'wallets.empty': "You don't have any wallets yet. Add the first one:",
   'wallets.addBtn': '➕ Add wallet',
   'wallets.delete': '🗑 Remove',
+  'wallets.exportMessage': '📋 Export wallets',
+  'wallets.exportEmpty': 'No wallets yet.',
 
   // ── multi-delete mode ──
   'del.title': (n: number) =>
@@ -355,7 +375,7 @@ const EN: Record<keyof typeof RU, Entry> = {
     `✅ <b>Wallet added to tracking</b>\n\n` +
     `👛 Address: <code>${p.address}</code>\n` +
     `🔎 Status: <b>active</b>\n` +
-    `⏱ Check: every <b>${p.interval}</b>s + instant TonAPI stream\n\n` +
+    `⏱️ Check: instantly via TonAPI Stream + backup check every <b>${p.interval}</b>s\n\n` +
     `I will notify you when a new transaction appears.`,
   'add.duplicateCard': (p: { address: string }) =>
     `♻️ <b>Wallet is already tracked</b>\n\n` +
@@ -375,6 +395,11 @@ const EN: Record<keyof typeof RU, Entry> = {
   'groups.created': '🗂 Group created.',
   'groups.deleted': 'Group deleted',
   'groups.pickTitle': '🗂 Choose a group for the wallet:',
+  'groups.detailTitle': (p: { name: string; selected: number; total: number }) =>
+    `🗂 <b>${p.name}</b>\n\n` +
+    `Selected wallets: <b>${p.selected}/${p.total}</b>\n\n` +
+    `Tap a wallet to add it to this group or remove it from it.`,
+  'groups.walletsEmpty': 'There are no wallets to configure yet. Add a wallet first.',
   'groups.none': '🚫 No group',
   'groups.added': 'Added to group',
   'groups.removed': 'Removed from group',
@@ -428,7 +453,10 @@ const EN: Record<keyof typeof RU, Entry> = {
 
   // ── notification settings ──
   'settings.notifs': '🔔 Notifications',
-  'notifs.title': '🔔 <b>Notification settings</b>\n\nFormat and filters for transaction messages.',
+  'notifs.title': (activeBots: string) =>
+    `🔔 <b>Notification settings</b>\n\n` +
+    `Format and filters for transaction messages.\n\n` +
+    `Active trading bots: <b>${activeBots}</b>`,
   'set.silent': '🌨 Silent mode',
   'set.contract': '⚡ Token contract',
   'set.balances': '💼 Balances',
@@ -458,6 +486,14 @@ const EN: Record<keyof typeof RU, Entry> = {
   // footer
   'footer.title': (cur: string) =>
     `✏️ <b>Notification footer</b>\n\nCurrent: ${cur}\n\nThis text is appended to the bottom of every notification.`,
+  'footer.chooseWallet': '✏️ <b>Choose a wallet for the footer</b>',
+  'footer.chooseGroup': '✏️ <b>Choose a group</b>',
+  'footer.byList': '📋 Wallet list',
+  'footer.byGroups': '🗂 By groups',
+  'footer.noWallets': 'Add a wallet first.',
+  'footer.noGroups': 'No groups yet.',
+  'footer.walletTitle': (cur: string) =>
+    `✏️ <b>Wallet footer</b>\n\nCurrent: ${cur}\n\nSend new text or “-” to clear the footer.`,
   'footer.prompt': 'Send the footer text (up to 200 chars), or “-” to clear:',
   'footer.empty': '<i>not set</i>',
 

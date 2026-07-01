@@ -37,11 +37,24 @@ describe('planWalletEvents', () => {
       [event('pending-12', 12)],
       13n,
       'final-13',
-      (id) => id === 'pending-12',
+      (raw) => raw.event_id === 'pending-12',
       () => false,
     );
 
     expect(plan.final.map((e) => e.event_id)).toEqual(['pending-12']);
+    expect(plan.cursorLt).toBe(13n);
+  });
+
+  it('finalizes tracked pending events by lt even if TonAPI changes event id', () => {
+    const plan = planWalletEvents(
+      [event('final-12-new-id', 12)],
+      13n,
+      'final-13',
+      (raw) => raw.lt === 12,
+      () => false,
+    );
+
+    expect(plan.final.map((e) => e.event_id)).toEqual(['final-12-new-id']);
     expect(plan.cursorLt).toBe(13n);
   });
 
